@@ -28,6 +28,24 @@ jobs:
     - name: Install dependencies
       run: flutter pub get
 
+    - name: Regenerate Android v2 embedding
+      run: flutter create --platforms=android --org app.noria .
+
+    - name: Force compileSdk 36
+      run: |
+        cat << 'GRADLE' >> android/build.gradle
+
+        subprojects {
+            afterEvaluate { project ->
+                if (project.hasProperty("android")) {
+                    project.android {
+                        compileSdkVersion 36
+                    }
+                }
+            }
+        }
+        GRADLE
+
     - name: Build APK
       run: flutter build apk --release --no-tree-shake-icons
 
