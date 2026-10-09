@@ -12,14 +12,13 @@ import '../domain/memory_snapshot.dart';
 import '../domain/ram_guard.dart';
 import 'resource_badge.dart';
 
-const List<String> kGeminiModels = [
+const List<String> kGeminiPresets = [
   'gemini-2.5-flash',
   'gemini-2.5-flash-lite',
   'gemini-3.5-flash',
-  'gemini-3.5-flash-lite',
   'gemini-3.8-flash',
   'gemma-4-26b',
-  'gemma-4-31b',
+  'Personnalisé...',
 ];
 
 class ResourcePanel extends ConsumerStatefulWidget {
@@ -31,8 +30,11 @@ class ResourcePanel extends ConsumerStatefulWidget {
 
 class _ResourcePanelState extends ConsumerState<ResourcePanel> {
   final _apiKeyController = TextEditingController();
+  final _customModelController = TextEditingController();
+  
   bool _isObscured = true;
-  String _selectedModel = kGeminiModels.first;
+  String _selectedPreset = kGeminiPresets.first;
+  bool _showSavedSuccess = false;
 
   @override
   void initState() {
@@ -43,12 +45,16 @@ class _ResourcePanelState extends ConsumerState<ResourcePanel> {
   Future<void> _loadStoredSettings() async {
     final prefs = await SharedPreferences.getInstance();
     final savedKey = prefs.getString('gemini_api_key') ?? '';
-    final savedModel = prefs.getString('gemini_model') ?? kGeminiModels.first;
+    final savedModel = prefs.getString('gemini_model') ?? 'gemini-2.5-flash';
+
     if (mounted) {
       setState(() {
         _apiKeyController.text = savedKey;
-        if (kGeminiModels.contains(savedModel)) {
-          _selectedModel = savedModel;
+        if (kGeminiPresets.contains(savedModel)) {
+          _selectedPreset = savedModel;
+        } else {
+          _selectedPreset = 'Personnalisé...';
+          _customModelController.text = savedModel;
         }
       });
     }
@@ -56,18 +62,25 @@ class _ResourcePanelState extends ConsumerState<ResourcePanel> {
 
   Future<void> _saveSettings() async {
     final prefs = await SharedPreferences.getInstance();
+    final modelToSave = _selectedPreset == 'Personnalisé...'
+        ? _customModelController.text.trim()
+        : _selectedPreset;
+
     await prefs.setString('gemini_api_key', _apiKeyController.text.trim());
-    await prefs.setString('gemini_model', _selectedModel);
+    await prefs.setString('gemini_model', modelToSave);
+
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Configuration Gemini enregistrée !')),
-      );
+      setState(() => _showSavedSuccess = true);
+      Future.delayed(const Duration(seconds: 3), () {
+        if (mounted) setState(() => _showSavedSuccess = false);
+      });
     }
   }
 
   @override
   void dispose() {
     _apiKeyController.dispose();
+    _customModelController.dispose();
     super.dispose();
   }
 
@@ -104,18 +117,29 @@ class _ResourcePanelState extends ConsumerState<ResourcePanel> {
               const _SectionTitle('CONFIGURATION CLOUD (GEMINI)'),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
-                value: _selectedModel,
+                value: _selectedPreset,
                 decoration: const InputDecoration(
                   labelText: 'Modèle Cloud',
                   border: OutlineInputBorder(),
                 ),
-                items: kGeminiModels
+                items: kGeminiPresets
                     .map((m) => DropdownMenuItem(value: m, child: Text(m)))
                     .toList(),
                 onChanged: (val) {
-                  if (val != null) setState(() => _selectedModel = val);
+                  if (val != null) setState(() => _selectedPreset = val);
                 },
               ),
+              if (_selectedPreset == 'Personnalisé...') ...[
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _customModelController,
+                  style: const TextStyle(fontFamily: NoriaTheme.mono, fontSize: 13),
+                  decoration: const InputDecoration(
+                    labelText: 'Identifiant du modèle (ex: gemini-2.0-flash)',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
               const SizedBox(height: 12),
               TextField(
                 controller: _apiKeyController,
@@ -132,9 +156,10 @@ class _ResourcePanelState extends ConsumerState<ResourcePanel> {
                 ),
               ),
               const SizedBox(height: 12),
-              FilledButton(
+              ElevatedButton.icon(
                 onPressed: _saveSettings,
-                child: const Text('ENREGISTRER LA CONFIGURATION'),
+                icon: Icon(_showSavedSuccess ? Icons.check_circle : Icons.save, color: Colors.green),
+                label: Text(_showSavedSuccess ? 'CONFIG ENREGISTRÉE ✅' : 'ENREGISTRER LA CONFIGURATION'),
               ),
             ] else ...[
               const _SectionTitle('MODÈLE LOCAL (GGUF)'),
@@ -144,9 +169,11 @@ class _ResourcePanelState extends ConsumerState<ResourcePanel> {
               Row(
                 children: [
                   Expanded(
-                    child: OutlinedButton(
+                    child: OutlinedButton.icon(
                       onPressed: model is ModelLoading ? null : () => _pickAndLoad(context, ref),
-                      child: const Text('CHARGER GGUF'),
+                      icon: Icon(model is ModelLoaded ? Icons.check_circle : Icons.folder_open,
+                          color: model is ModelLoaded ? Colors.green : null),
+                      label: Text(model is ModelLoaded ? 'CHARGÉ ✅' : 'CHARGER GGUF'),
                     ),
                   ),
                   const SizedBox(width: 8),
