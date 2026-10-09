@@ -28,10 +28,12 @@ jobs:
     - name: Install dependencies
       run: flutter pub get
 
-    - name: Regenerate Android v2 embedding
-      run: flutter create --platforms=android --org app.noria .
+    - name: Regenerate Android framework and clean DSL duplicates
+      run: |
+        flutter create --platforms=android --org app.noria .
+        rm -f android/build.gradle.kts android/app/build.gradle.kts
 
-    - name: Configure Root Gradle (SDK 36 without afterEvaluate)
+    - name: Configure Root Gradle (SDK 36 Override)
       run: |
         cat << 'GRADLE' > android/build.gradle
         allprojects {
@@ -50,12 +52,12 @@ jobs:
         }
 
         subprojects {
-            project.pluginManager.withPlugin('com.android.library') {
+            pluginManager.withPlugin('com.android.library') {
                 android {
                     compileSdk 36
                 }
             }
-            project.pluginManager.withPlugin('com.android.application') {
+            pluginManager.withPlugin('com.android.application') {
                 android {
                     compileSdk 36
                 }
@@ -64,6 +66,50 @@ jobs:
 
         tasks.register("clean", Delete) {
             delete rootProject.buildDir
+        }
+        GRADLE
+
+    - name: Configure App Gradle (Target Android 15)
+      run: |
+        cat << 'GRADLE' > android/app/build.gradle
+        plugins {
+            id "com.android.application"
+            id "kotlin-android"
+            id "dev.flutter.flutter-gradle-plugin"
+        }
+
+        android {
+            namespace "app.noria"
+            compileSdk 36
+
+            defaultConfig {
+                applicationId "app.noria"
+                minSdk 24
+                targetSdk 35
+                versionCode 1
+                versionName "1.0.0"
+            }
+
+            compileOptions {
+                sourceCompatibility JavaVersion.VERSION_17
+                targetCompatibility JavaVersion.VERSION_17
+            }
+
+            kotlinOptions {
+                jvmTarget = "17"
+            }
+
+            buildTypes {
+                release {
+                    signingConfig signingConfigs.debug
+                    minifyEnabled false
+                    shrinkResources false
+                }
+            }
+        }
+
+        flutter {
+            source "../.."
         }
         GRADLE
 
