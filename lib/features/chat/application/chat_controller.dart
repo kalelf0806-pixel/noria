@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../inference/application/model_controller.dart';
 import '../../inference/domain/inference_mode.dart';
+import '../../inference/infrastructure/ffi_local_engine.dart';
 
 enum ChatRole { user, assistant, system }
 
@@ -40,27 +41,43 @@ class ChatController extends Notifier<List<ChatMessage>> {
     final mode = ref.read(inferenceModeProvider);
     final model = ref.read(modelControllerProvider);
 
-    // Ajout immédiat du message utilisateur
+    // Ajout du message de l'utilisateur
     state = [
       ...state,
       ChatMessage(id: _nextId++, role: ChatRole.user, text: text, mode: mode),
     ];
 
+    // Mode Local : exécution native C++ FFI
     if (mode == InferenceMode.local) {
-      final reply = model is! ModelLoaded
-          ? 'Aucun modèle local chargé. Ouvrez le moniteur RAM pour charger un fichier GGUF.'
-          : 'Runtime llama.cpp non branché (Phase 2).';
+      if (model is! ModelLoaded) {
+        state = [
+          ...state,
+          ChatMessage(
+            id: _nextId++,
+            role: ChatRole.system,
+            text: 'Aucun modèle local chargé. Ouvrez le moniteur RAM pour charger un fichier GGUF.',
+            mode: mode,
+          ),
+        ];
+        return;
+      }
+
+      final engine = ref.read(localEngineProvider);
+      final reply = (engine is FfiLocalEngine)
+          ? engine.infer(text)
+          : '[Local] Modèle ${model.name} chargé (${model.backend.label}).';
+
       state = [
         ...state,
-        ChatMessage(id: _nextId++, role: ChatRole.system, text: reply, mode: mode),
+        ChatMessage(id: _nextId++, role: ChatRole.assistant, text: reply, mode: mode),
       ];
       return;
     }
 
-    // Mode Cloud Gemini
+    // Mode Cloud Gemini REST
     final prefs = await SharedPreferences.getInstance();
     final apiKey = prefs.getString('gemini_api_key') ?? '';
-    final selectedModel = prefs.getString('gemini_model') ?? 'gemini-2.5-flash';
+    final selectedModel = prefs.getString('gemini_model') ?? 'gemini-3.8-flash';
 
     if (apiKey.isEmpty) {
       state = [

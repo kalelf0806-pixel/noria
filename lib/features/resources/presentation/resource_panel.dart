@@ -13,11 +13,10 @@ import '../domain/ram_guard.dart';
 import 'resource_badge.dart';
 
 const List<String> kGeminiPresets = [
-  'gemini-2.5-flash',
-  'gemini-2.5-flash-lite',
-  'gemini-3.5-flash',
   'gemini-3.8-flash',
-  'gemma-4-26b',
+  'gemini-3.5-flash',
+  'gemini-3.5-flash-lite',
+  'gemini-3.1-flash-lite',
   'Personnalisé...',
 ];
 
@@ -45,7 +44,7 @@ class _ResourcePanelState extends ConsumerState<ResourcePanel> {
   Future<void> _loadStoredSettings() async {
     final prefs = await SharedPreferences.getInstance();
     final savedKey = prefs.getString('gemini_api_key') ?? '';
-    final savedModel = prefs.getString('gemini_model') ?? 'gemini-2.5-flash';
+    final savedModel = prefs.getString('gemini_model') ?? 'gemini-3.8-flash';
 
     if (mounted) {
       setState(() {
@@ -135,7 +134,7 @@ class _ResourcePanelState extends ConsumerState<ResourcePanel> {
                   controller: _customModelController,
                   style: const TextStyle(fontFamily: NoriaTheme.mono, fontSize: 13),
                   decoration: const InputDecoration(
-                    labelText: 'Identifiant du modèle (ex: gemini-2.0-flash)',
+                    labelText: 'Identifiant exact du modèle',
                     border: OutlineInputBorder(),
                   ),
                 ),

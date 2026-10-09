@@ -6,6 +6,7 @@ import '../../resources/application/resource_providers.dart';
 import '../../resources/domain/ram_guard.dart';
 import '../domain/inference_mode.dart';
 import '../domain/local_inference_engine.dart';
+import '../infrastructure/ffi_local_engine.dart';
 
 sealed class ModelState {
   const ModelState();
@@ -39,7 +40,7 @@ class ModelError extends ModelState {
   final String message;
 }
 
-final localEngineProvider = Provider<LocalInferenceEngine>((ref) => StubLocalEngine());
+final localEngineProvider = Provider<LocalInferenceEngine>((ref) => FfiLocalEngine());
 
 final inferenceModeProvider =
     NotifierProvider<InferenceModeNotifier, InferenceMode>(InferenceModeNotifier.new);
@@ -69,8 +70,6 @@ class ModelController extends Notifier<ModelState> {
         );
   }
 
-  /// Loads a model after the caller has shown the [RamGuardResult] to the user.
-  /// A blocking verdict is re-checked here so the guard cannot be bypassed.
   Future<void> load(String path, {ComputeBackend backend = ComputeBackend.cpu}) async {
     final name = path.split(Platform.pathSeparator).last;
     final guard = await evaluate(path);
