@@ -1,26 +1,75 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/bytes.dart';
 import '../../inference/application/model_controller.dart';
+import '../../inference/domain/inference_mode.dart';
 import '../application/resource_providers.dart';
 import '../domain/memory_snapshot.dart';
 import '../domain/ram_guard.dart';
-import 'resource_badge.dart';
 
-class ResourcePanel extends ConsumerWidget {
+class ResourcePanel extends ConsumerStatefulWidget {
   const ResourcePanel({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ResourcePanel> createState() => _ResourcePanelState();
+}
+
+class _ResourcePanelState extends ConsumerState<ResourcePanel> {
+  final _apiKeyController = TextEditingController();
+  bool _isObscured = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadStoredApiKey();
+  }
+
+  Future<void> _loadStoredApiKey() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedKey = prefs.getString('gemini_api_key') ?? '';
+    if (mounted) {
+      setState(() {
+        _apiKeyController.text = savedKey;
+      });
+    }
+  }
+
+  Future<void> _saveApiKey() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('gemini_api_key', _apiKeyController.text.trim());
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Clé API Gemini enregistrée !')),
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _apiKeyController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final snapshot = ref.watch(memorySnapshotProvider);
     final model = ref.watch(modelControllerProvider);
+    final mode = ref.watch(inferenceModeProvider);
+
+    final isCloud = mode == InferenceMode.cloud;
 
     return SafeArea(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+        padding: EdgeInsets.only(
+          left: 20,
+          right: 20,
+          top: 20,
+          bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -33,30 +82,55 @@ class ResourcePanel extends ConsumerWidget {
               _ => const LinearProgressIndicator(),
             },
             const SizedBox(height: 24),
-            const _SectionTitle('MODÈLE LOCAL'),
-            const SizedBox(height: 12),
-            _ModelStatus(state: model),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: model is ModelLoading ? null : () => _pickAndLoad(context, ref),
-                    child: const Text('CHARGER GGUF'),
+
+            if (isCloud) ...[
+              const _SectionTitle('CONFIGURATION CLOUD (GEMINI)'),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _apiKeyController,
+                obscureText: _isObscured,
+                style: const TextStyle(fontFamily: NoriaTheme.mono, fontSize: 13),
+                decoration: InputDecoration(
+                  labelText: 'Clé API Gemini',
+                  hintText: 'AIzaSy...',
+                  border: const OutlineInputBorder(),
+                  suffixIcon: IconButton(
+                    icon: Icon(_isObscured ? Icons.visibility : Icons.visibility_off),
+                    onPressed: () => setState(() => _isObscured = !_isObscured),
                   ),
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: FilledButton(
-                    onPressed: model is ModelLoaded
-                        ? () => ref.read(modelControllerProvider.notifier).eject()
-                        : null,
-                    style: FilledButton.styleFrom(backgroundColor: NoriaColors.danger),
-                    child: const Text('EJECT'),
+              ),
+              const SizedBox(height: 12),
+              FilledButton(
+                onPressed: _saveApiKey,
+                child: const Text('ENREGISTRER LA CLÉ'),
+              ),
+            ] else ...[
+              const _SectionTitle('MODÈLE LOCAL (GGUF)'),
+              const SizedBox(height: 12),
+              _ModelStatus(state: model),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: model is ModelLoading ? null : () => _pickAndLoad(context, ref),
+                      child: const Text('CHARGER GGUF'),
+                    ),
                   ),
-                ),
-              ],
-            ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: model is ModelLoaded
+                          ? () => ref.read(modelControllerProvider.notifier).eject()
+                          : null,
+                      style: FilledButton.styleFrom(backgroundColor: NoriaColors.danger),
+                      child: const Text('EJECT'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ],
         ),
       ),
