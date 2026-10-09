@@ -10,6 +10,7 @@ import '../../inference/domain/inference_mode.dart';
 import '../application/resource_providers.dart';
 import '../domain/memory_snapshot.dart';
 import '../domain/ram_guard.dart';
+import 'resource_badge.dart';
 
 class ResourcePanel extends ConsumerStatefulWidget {
   const ResourcePanel({super.key});
