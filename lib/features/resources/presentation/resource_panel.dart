@@ -12,6 +12,16 @@ import '../domain/memory_snapshot.dart';
 import '../domain/ram_guard.dart';
 import 'resource_badge.dart';
 
+const List<String> kGeminiModels = [
+  'gemini-2.5-flash',
+  'gemini-2.5-flash-lite',
+  'gemini-3.5-flash',
+  'gemini-3.5-flash-lite',
+  'gemini-3.8-flash',
+  'gemma-4-26b',
+  'gemma-4-31b',
+];
+
 class ResourcePanel extends ConsumerStatefulWidget {
   const ResourcePanel({super.key});
 
@@ -22,29 +32,35 @@ class ResourcePanel extends ConsumerStatefulWidget {
 class _ResourcePanelState extends ConsumerState<ResourcePanel> {
   final _apiKeyController = TextEditingController();
   bool _isObscured = true;
+  String _selectedModel = kGeminiModels.first;
 
   @override
   void initState() {
     super.initState();
-    _loadStoredApiKey();
+    _loadStoredSettings();
   }
 
-  Future<void> _loadStoredApiKey() async {
+  Future<void> _loadStoredSettings() async {
     final prefs = await SharedPreferences.getInstance();
     final savedKey = prefs.getString('gemini_api_key') ?? '';
+    final savedModel = prefs.getString('gemini_model') ?? kGeminiModels.first;
     if (mounted) {
       setState(() {
         _apiKeyController.text = savedKey;
+        if (kGeminiModels.contains(savedModel)) {
+          _selectedModel = savedModel;
+        }
       });
     }
   }
 
-  Future<void> _saveApiKey() async {
+  Future<void> _saveSettings() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('gemini_api_key', _apiKeyController.text.trim());
+    await prefs.setString('gemini_model', _selectedModel);
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Clé API Gemini enregistrée !')),
+        const SnackBar(content: Text('Configuration Gemini enregistrée !')),
       );
     }
   }
@@ -87,6 +103,20 @@ class _ResourcePanelState extends ConsumerState<ResourcePanel> {
             if (isCloud) ...[
               const _SectionTitle('CONFIGURATION CLOUD (GEMINI)'),
               const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                value: _selectedModel,
+                decoration: const InputDecoration(
+                  labelText: 'Modèle Cloud',
+                  border: OutlineInputBorder(),
+                ),
+                items: kGeminiModels
+                    .map((m) => DropdownMenuItem(value: m, child: Text(m)))
+                    .toList(),
+                onChanged: (val) {
+                  if (val != null) setState(() => _selectedModel = val);
+                },
+              ),
+              const SizedBox(height: 12),
               TextField(
                 controller: _apiKeyController,
                 obscureText: _isObscured,
@@ -103,8 +133,8 @@ class _ResourcePanelState extends ConsumerState<ResourcePanel> {
               ),
               const SizedBox(height: 12),
               FilledButton(
-                onPressed: _saveApiKey,
-                child: const Text('ENREGISTRER LA CLÉ'),
+                onPressed: _saveSettings,
+                child: const Text('ENREGISTRER LA CONFIGURATION'),
               ),
             ] else ...[
               const _SectionTitle('MODÈLE LOCAL (GGUF)'),
