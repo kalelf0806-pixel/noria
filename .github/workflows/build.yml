@@ -25,15 +25,13 @@ jobs:
         channel: 'stable'
         cache: true
 
-    - name: Install dependencies
-      run: flutter pub get
-
-    - name: Regenerate Android framework and clean DSL duplicates
+    - name: Clean and regenerate Android structure
       run: |
+        rm -rf android
         flutter create --platforms=android --org app.noria .
         rm -f android/build.gradle.kts android/app/build.gradle.kts
 
-    - name: Configure Root Gradle (SDK 36 Override)
+    - name: Configure Root Gradle (Groovy DSL & SDK 36 Override)
       run: |
         cat << 'GRADLE' > android/build.gradle
         allprojects {
@@ -52,12 +50,12 @@ jobs:
         }
 
         subprojects {
-            pluginManager.withPlugin('com.android.library') {
+            plugins.withId('com.android.library') {
                 android {
                     compileSdk 36
                 }
             }
-            pluginManager.withPlugin('com.android.application') {
+            plugins.withId('com.android.application') {
                 android {
                     compileSdk 36
                 }
@@ -69,7 +67,7 @@ jobs:
         }
         GRADLE
 
-    - name: Configure App Gradle (Target Android 15)
+    - name: Configure App Gradle (Android 15 / targetSdk 35)
       run: |
         cat << 'GRADLE' > android/app/build.gradle
         plugins {
@@ -112,6 +110,9 @@ jobs:
             source "../.."
         }
         GRADLE
+
+    - name: Install dependencies
+      run: flutter pub get
 
     - name: Build APK
       run: flutter build apk --release --no-tree-shake-icons
