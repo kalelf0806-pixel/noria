@@ -28,9 +28,6 @@ jobs:
     - name: Install dependencies
       run: flutter pub get
 
-    - name: Repair Android v2 embedding project
-      run: flutter create --platforms=android --org app.noria .
-
     - name: Build APK
       run: flutter build apk --release --no-tree-shake-icons
 
