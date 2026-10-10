@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 
 import '../../inference/application/model_controller.dart';
+import '../../inference/domain/local_inference_engine.dart';
 
 enum ChatRole { user, assistant }
 
@@ -60,49 +61,60 @@ class ChatController extends StateNotifier<List<ChatMessage>> {
         return;
       }
 
-      try {
-        // Utilisation du endpoint moderne géré par v1beta pour Gemini Flash
-        final response = await http.post(
-          Uri.parse('https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent'),
-          headers: {
-            'Content-Type': 'application/json',
-            'x-goog-api-key': apiKey,
-          },
-          body: jsonEncode({
-            'contents': [
-              {
-                'parts': [{'text': messageText}]
-              }
-            ]
-          }),
-        );
+      // Liste de repli intelligente pour tester les modèles Gemini disponibles
+      final candidateModels = [
+        'gemini-3.8-flash',
+        'gemini-3.5-flash',
+        'gemini-2.5-flash',
+        'gemini-1.5-flash',
+        'gemini-pro',
+      ];
 
-        String replyText;
-        if (response.statusCode == 200) {
-          final data = jsonDecode(response.body);
-          replyText = data['candidates']?[0]?['content']?['parts']?[0]?['text'] ?? 'Réponse Cloud vide';
-        } else {
-          replyText = 'Cloud Erreur (${response.statusCode}) : ${response.body}';
+      String? replyText;
+      int statusCode = 500;
+      String lastErrorBody = '';
+
+      for (final model in candidateModels) {
+        try {
+          final response = await http.post(
+            Uri.parse('https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent'),
+            headers: {
+              'Content-Type': 'application/json',
+              'x-goog-api-key': apiKey,
+            },
+            body: jsonEncode({
+              'contents': [
+                {
+                  'parts': [{'text': messageText}]
+                }
+              ]
+            }),
+          );
+
+          statusCode = response.statusCode;
+          if (response.statusCode == 200) {
+            final data = jsonDecode(response.body);
+            replyText = data['candidates']?[0]?['content']?['parts']?[0]?['text'] ?? 'Réponse Cloud vide';
+            break;
+          } else {
+            lastErrorBody = response.body;
+          }
+        } catch (e) {
+          lastErrorBody = e.toString();
         }
-
-        final assistantMsg = ChatMessage(
-          id: (DateTime.now().millisecondsSinceEpoch + 1).toString(),
-          text: replyText,
-          role: ChatRole.assistant,
-          mode: ChatModeInfo(modeLabel),
-        );
-        state = [...state, assistantMsg];
-      } catch (e) {
-        final errorMsg = ChatMessage(
-          id: (DateTime.now().millisecondsSinceEpoch + 1).toString(),
-          text: 'Cloud Exception: $e',
-          role: ChatRole.assistant,
-          mode: ChatModeInfo('Erreur'),
-        );
-        state = [...state, errorMsg];
       }
+
+      final finalReply = replyText ?? 'Cloud Erreur ($statusCode) : $lastErrorBody';
+
+      final assistantMsg = ChatMessage(
+        id: (DateTime.now().millisecondsSinceEpoch + 1).toString(),
+        text: finalReply,
+        role: ChatRole.assistant,
+        mode: ChatModeInfo(modeLabel),
+      );
+      state = [...state, assistantMsg];
     } else {
-      // Appel du moteur d'inférence local (FFI / Stub)
+      // Appel du moteur local enrichi
       final engine = _ref.read(localEngineProvider);
       final reply = engine.infer(messageText);
 

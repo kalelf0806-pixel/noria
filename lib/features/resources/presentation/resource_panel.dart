@@ -82,7 +82,7 @@ class _ResourcePanelState extends State<ResourcePanel> {
                     valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
                   ),
                   const SizedBox(height: 12),
-                  _buildMetricRow('Empreinte Process (RSS/App)', formatBytes(snapshot.appBytes)),
+                  _buildMetricRow('Empreinte Process (RSS)', formatBytes(snapshot.appBytes)),
                   _buildMetricRow('RAM Utilisée / Totale', '${formatBytes(snapshot.usedBytes)} / ${formatBytes(snapshot.totalBytes)} (${formatPercent(snapshot.usedRatio)})'),
                   _buildMetricRow('RAM Disponible', formatBytes(snapshot.availableBytes)),
                   _buildMetricRow('Alerte Basse Mémoire', snapshot.lowMemory ? '⚠️ OUI' : 'NON (Stable)'),
@@ -151,8 +151,11 @@ class _ResourcePanelState extends State<ResourcePanel> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: const TextStyle(color: Colors.grey, fontSize: 13)),
-          Text(value, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600, fontFamily: 'monospace')),
+          Expanded(
+            child: Text(label, style: const TextStyle(color: Colors.grey, fontSize: 13), overflow: TextOverflow.ellipsis),
+          ),
+          const SizedBox(width: 8),
+          Text(value, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600, fontFamily: 'monospace')),
         ],
       ),
     );
