@@ -52,7 +52,7 @@ class FfiLocalEngine implements LocalInferenceEngine {
         _loaded = true;
       } else {
         _loaded = false;
-        throw Exception('Échec d\'initialisation dans le runtime C++ natif.');
+        throw Exception('Échec du chargement du modèle dans le runtime natif C++.');
       }
     } catch (e) {
       _loaded = false;
@@ -85,14 +85,8 @@ class FfiLocalEngine implements LocalInferenceEngine {
       final response = responsePtr.toDartString();
       _cachedFreeFunc!(responsePtr);
       return response;
-    } catch (_) {
-      // Fallback robuste simulant l'accélération NPU si le .so natif est en mode stub
-      return '''[Noria Engine / Snapdragon 888 NPU]
-Matériel : Qualcomm Hexagon 780 AI Accelerator
-Performance : ~46.2 tok/s | Latence : 0.85 ms
-Mode : 100% Hors-ligne (Quantized Edge AI)
-
-Réponse générée localement : J'ai bien reçu votre message : "$prompt". Le pipeline d'inférence est actif sur votre matériel.''';
+    } catch (e) {
+      return '[Erreur d\'appel FFI natif] : $e';
     }
   }
 

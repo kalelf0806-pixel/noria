@@ -35,6 +35,31 @@ class ChatController extends StateNotifier<List<ChatMessage>> {
   ChatController(this._ref) : super([]);
   final Ref _ref;
 
+  /// Découvre dynamiquement le premier modèle Cloud supportant generateContent
+  Future<String?> _discoverActiveModel(String apiKey) async {
+    try {
+      final response = await http.get(
+        Uri.parse('https://generativelanguage.googleapis.com/v1beta/models?key=$apiKey'),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final models = data['models'] as List<dynamic>?;
+        if (models != null) {
+          for (final m in models) {
+            final name = m['name'] as String?; // ex: "models/gemini-1.5-flash" ou "models/gemini-2.5-flash"
+            final methods = m['supportedGenerationMethods'] as List<dynamic>?;
+            if (name != null && methods != null && methods.contains('generateContent')) {
+              // On retire le préfixe "models/" si présent pour l'URL d'appel
+              return name.replaceFirst('models/', '');
+            }
+          }
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
   Future<void> sendMessage(String messageText, bool isCloudMode, {String modeLabel = 'Standard'}) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('last_message', messageText);
@@ -53,7 +78,7 @@ class ChatController extends StateNotifier<List<ChatMessage>> {
       if (apiKey.isEmpty) {
         final errorMsg = ChatMessage(
           id: (DateTime.now().millisecondsSinceEpoch + 1).toString(),
-          text: 'Erreur Cloud : Clé API Gemini manquante. Configurez-la dans le panneau ressources (badge en haut à droite).',
+          text: 'Erreur Cloud : Clé API Gemini manquante. Configurez-la dans le panneau de ressources (badge en haut à droite).',
           role: ChatRole.assistant,
           mode: ChatModeInfo('Erreur'),
         );
@@ -61,60 +86,51 @@ class ChatController extends StateNotifier<List<ChatMessage>> {
         return;
       }
 
-      // Liste de repli intelligente pour tester les modèles Gemini disponibles
-      final candidateModels = [
-        'gemini-3.8-flash',
-        'gemini-3.5-flash',
-        'gemini-2.5-flash',
-        'gemini-1.5-flash',
-        'gemini-pro',
-      ];
+      // 1. Découverte dynamique du modèle valide
+      final activeModel = await _discoverActiveModel(apiKey) ?? 'gemini-1.5-flash';
 
-      String? replyText;
-      int statusCode = 500;
-      String lastErrorBody = '';
+      try {
+        final response = await http.post(
+          Uri.parse('https://generativelanguage.googleapis.com/v1beta/models/$activeModel:generateContent'),
+          headers: {
+            'Content-Type': 'application/json',
+            'x-goog-api-key': apiKey,
+          },
+          body: jsonEncode({
+            'contents': [
+              {
+                'parts': [{'text': messageText}]
+              }
+            ]
+          }),
+        );
 
-      for (final model in candidateModels) {
-        try {
-          final response = await http.post(
-            Uri.parse('https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent'),
-            headers: {
-              'Content-Type': 'application/json',
-              'x-goog-api-key': apiKey,
-            },
-            body: jsonEncode({
-              'contents': [
-                {
-                  'parts': [{'text': messageText}]
-                }
-              ]
-            }),
-          );
-
-          statusCode = response.statusCode;
-          if (response.statusCode == 200) {
-            final data = jsonDecode(response.body);
-            replyText = data['candidates']?[0]?['content']?['parts']?[0]?['text'] ?? 'Réponse Cloud vide';
-            break;
-          } else {
-            lastErrorBody = response.body;
-          }
-        } catch (e) {
-          lastErrorBody = e.toString();
+        String replyText;
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body);
+          replyText = data['candidates']?[0]?['content']?['parts']?[0]?['text'] ?? 'Réponse Cloud vide';
+        } else {
+          replyText = 'Cloud Erreur (${response.statusCode}) sur [$activeModel] : ${response.body}';
         }
+
+        final assistantMsg = ChatMessage(
+          id: (DateTime.now().millisecondsSinceEpoch + 1).toString(),
+          text: replyText,
+          role: ChatRole.assistant,
+          mode: ChatModeInfo('$modeLabel ($activeModel)'),
+        );
+        state = [...state, assistantMsg];
+      } catch (e) {
+        final errorMsg = ChatMessage(
+          id: (DateTime.now().millisecondsSinceEpoch + 1).toString(),
+          text: 'Cloud Exception: $e',
+          role: ChatRole.assistant,
+          mode: ChatModeInfo('Erreur'),
+        );
+        state = [...state, errorMsg];
       }
-
-      final finalReply = replyText ?? 'Cloud Erreur ($statusCode) : $lastErrorBody';
-
-      final assistantMsg = ChatMessage(
-        id: (DateTime.now().millisecondsSinceEpoch + 1).toString(),
-        text: finalReply,
-        role: ChatRole.assistant,
-        mode: ChatModeInfo(modeLabel),
-      );
-      state = [...state, assistantMsg];
     } else {
-      // Appel du moteur local enrichi
+      // Appel du moteur local FFI / Stub
       final engine = _ref.read(localEngineProvider);
       final reply = engine.infer(messageText);
 
