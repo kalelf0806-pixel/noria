@@ -11,6 +11,8 @@ dependencies:
     sdk: flutter
   flutter_riverpod: ^2.5.1
   file_picker: ^8.1.2
+  http: ^1.2.0
+  shared_preferences: ^2.2.2
 
 dev_dependencies:
   flutter_test:

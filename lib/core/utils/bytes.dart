@@ -1,14 +1,9 @@
 String formatBytes(int bytes) {
-  if (bytes < 0) return '—';
-  const units = ['o', 'Ko', 'Mo', 'Go', 'To'];
-  var value = bytes.toDouble();
-  var unit = 0;
-  while (value >= 1024 && unit < units.length - 1) {
-    value /= 1024;
-    unit++;
-  }
-  final digits = unit >= 3 ? 2 : 0;
-  return '${value.toStringAsFixed(digits)} ${units[unit]}';
+  if (bytes < 1024) return '$bytes B';
+  if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} Ko';
+  return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} Mo';
 }
 
-String formatPercent(double ratio) => '${(ratio * 100).toStringAsFixed(0)}%';
+String formatPercent(double ratio) {
+  return '${(ratio * 100).toStringAsFixed(0)}%';
+}
