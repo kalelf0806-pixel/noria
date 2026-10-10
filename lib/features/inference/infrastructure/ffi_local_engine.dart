@@ -36,7 +36,7 @@ class FfiLocalEngine implements LocalInferenceEngine {
   bool get isLoaded => _loaded;
 
   @override
-  Future<void> load(String modelPath, {ComputeBackend backend = ComputeBackend.cpu}) async {
+  Future<void> load(String modelPath, {ComputeBackend backend = ComputeBackend.npu}) async {
     try {
       final loadFunc = lib.lookupFunction<NativeLoad, DartLoad>('noria_load_model');
       final pathPtr = modelPath.toNativeUtf8();
