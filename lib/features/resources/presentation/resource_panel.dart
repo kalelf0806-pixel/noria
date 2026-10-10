@@ -1,189 +1,59 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:file_picker/file_picker.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-
-import '../application/resource_providers.dart';
-import '../../inference/domain/inference_mode.dart';
+import '../../../core/utils/hardware_evaluator.dart';
 import '../../inference/application/model_controller.dart';
-import '../../inference/domain/local_inference_engine.dart';
-import '../../chat/application/cloud_models_provider.dart';
-import '../domain/ram_guard.dart';
-import '../../../core/utils/bytes.dart';
+import '../application/resource_providers.dart';
 
-class ResourcePanel extends StatefulWidget {
+class ResourcePanel extends ConsumerWidget {
   const ResourcePanel({super.key});
 
   @override
-  State<ResourcePanel> createState() => _ResourcePanelState();
-}
+  Widget build(BuildContext context, WidgetRef ref) {
+    final resourceState = ref.watch(resourceNotifierProvider);
+    final modelState = ref.watch(modelControllerProvider);
 
-class _ResourcePanelState extends State<ResourcePanel> {
-  late final TextEditingController _apiKeyController;
-
-  @override
-  void initState() {
-    super.initState();
-    _apiKeyController = TextEditingController();
-    _loadApiKey();
-  }
-
-  Future<void> _loadApiKey() async {
-    final prefs = await SharedPreferences.getInstance();
-    if (mounted) {
-      _apiKeyController.text = prefs.getString('gemini_api_key') ?? '';
-    }
-  }
-
-  Future<void> _saveApiKey(String value, WidgetRef ref) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('gemini_api_key', value.trim());
-    
-    // Rafraîchir immédiatement la liste des modèles Cloud disponibles
-    ref.read(cloudModelsProvider.notifier).fetchModels();
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Clé API enregistrée & modèles synchronisés !')),
-      );
-    }
-  }
-
-  @override
-  void dispose() {
-    _apiKeyController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Consumer(
-      builder: (context, ref, _) {
-        final memoryAsync = ref.watch(memorySnapshotProvider);
-        final engine = ref.watch(localEngineProvider);
-        final modelState = ref.watch(modelControllerProvider);
-
-        final modelName = switch (modelState) {
-          ModelLoaded(:final name) => name,
-          ModelLoading(:final name) => 'Chargement de $name...',
-          _ => 'Aucun modèle chargé',
-        };
-
-        return ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            const Text(
-              'TÉLÉMÉTRIE MATÉRIELLE',
-              style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.2),
-            ),
-            const SizedBox(height: 12),
-            memoryAsync.when(
-              data: (snapshot) => Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  LinearProgressIndicator(
-                    value: snapshot.usedRatio,
-                    backgroundColor: Colors.grey.shade900,
-                    valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
-                  ),
-                  const SizedBox(height: 12),
-                  _buildMetricRow('Empreinte Process (RSS)', formatBytes(snapshot.appBytes)),
-                  _buildMetricRow('RAM Utilisée / Totale', '${formatBytes(snapshot.usedBytes)} / ${formatBytes(snapshot.totalBytes)} (${formatPercent(snapshot.usedRatio)})'),
-                  _buildMetricRow('RAM Disponible', formatBytes(snapshot.availableBytes)),
-                  _buildMetricRow('Alerte Basse Mémoire', snapshot.lowMemory ? '⚠️ OUI' : 'NON (Stable)'),
-                  const SizedBox(height: 8),
-                  _buildMetricRow('SoC / Chipset', snapshot.chip ?? 'Qualcomm SM8350 (Snapdragon 888)'),
-                  _buildMetricRow('Unité de Calcul Active', engine.isLoaded ? '⚡ Actif (NPU / FFI)' : '💤 IDLE'),
-                ],
-              ),
-              loading: () => const LinearProgressIndicator(),
-              error: (_, __) => const Text('Erreur de lecture de la télémétrie mémoire', style: TextStyle(color: Colors.red)),
-            ),
-            const Divider(height: 32),
-            const Text(
-              'CONFIGURATION CLOUD (GEMINI API)',
-              style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.2),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _apiKeyController,
-              obscureText: true,
-              style: const TextStyle(color: Colors.white, fontSize: 13),
-              decoration: InputDecoration(
-                hintText: 'Entrer la clé API Gemini (ex: AIzaSy...)',
-                hintStyle: TextStyle(color: Colors.grey.shade600),
-                filled: true,
-                fillColor: Colors.grey.shade900,
-                suffixIcon: IconButton(
-                  icon: const Icon(Icons.save, color: Colors.white, size: 20),
-                  onPressed: () => _saveApiKey(_apiKeyController.text, ref),
-                ),
-              ),
-              onSubmitted: (val) => _saveApiKey(val, ref),
-            ),
-            const Divider(height: 32),
-            const Text(
-              'MOTEUR LOCAL (GGUF / LITERTLM)',
-              style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.2),
-            ),
-            const SizedBox(height: 12),
-            _buildMetricRow('Modèle Actif', modelName),
-            const SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(engine.isLoaded ? 'Statut : Prêt en mémoire' : 'Statut : Aucun modèle', style: const TextStyle(color: Colors.white70, fontSize: 13)),
-                ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: engine.isLoaded ? Colors.red.shade900 : Colors.white,
-                    foregroundColor: engine.isLoaded ? Colors.white : Colors.black,
-                  ),
-                  onPressed: () => engine.isLoaded ? _ejectModel(ref) : _pickAndLoad(context, ref),
-                  icon: Icon(engine.isLoaded ? Icons.eject : Icons.folder_open, size: 16),
-                  label: Text(engine.isLoaded ? 'EJECT' : 'CHARGER MODÈLE'),
-                ),
-              ],
-            ),
-          ],
-        );
-      },
+    final activeHardware = HardwareEvaluator.evaluate(
+      modelPath: modelState.currentModelPath,
+      isLoaded: modelState.isLoaded,
+      chipName: "Qualcomm SM8350",
     );
-  }
 
-  Widget _buildMetricRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAlignment.start,
         children: [
-          Expanded(
-            child: Text(label, style: const TextStyle(color: Colors.grey, fontSize: 13), overflow: TextOverflow.ellipsis),
+          const Text(
+            'TÉLÉMÉTRIE MATÉRIELLE',
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 1.2,
+            ),
           ),
-          const SizedBox(width: 8),
-          Text(value, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600, fontFamily: 'monospace')),
+          const Divider(color: Colors.white24),
+          const SizedBox(height: 8),
+          _buildRow('Empreinte Process (RSS)', '${resourceState.rssMb.toStringAsFixed(1)} Mo'),
+          _buildRow('RAM Utilisée / Total', '${resourceState.usedRamMb.toStringAsFixed(1)} Mo / ${resourceState.totalRamMb.toStringAsFixed(1)} Mo'),
+          _buildRow('RAM Disponible', '${resourceState.availableRamMb.toStringAsFixed(1)} Mo'),
+          _buildRow('Alerte Basse Mémoire', resourceState.isLowMemory ? 'OUI (Alerte)' : 'NON (Stable)'),
+          _buildRow('SoC / Chipset', 'Qualcomm SM8350'),
+          _buildRow('Unité de Calcul Active', activeHardware),
         ],
       ),
     );
   }
 
-  Future<void> _pickAndLoad(BuildContext context, WidgetRef ref) async {
-    final picked = await FilePicker.platform.pickFiles(type: FileType.any);
-    final path = picked?.files.single.path;
-    if (path == null || !context.mounted) return;
-
-    if (!path.toLowerCase().endsWith('.gguf') && !path.toLowerCase().endsWith('.litertlm')) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Sélectionnez un fichier .gguf ou .litertlm valide')),
-      );
-      return;
-    }
-
-    final controller = ref.read(modelControllerProvider.notifier);
-    await controller.load(path, backend: ComputeBackend.npu);
-  }
-
-  Future<void> _ejectModel(WidgetRef ref) async {
-    final controller = ref.read(modelControllerProvider.notifier);
-    await controller.eject();
+  Widget _buildRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: const TextStyle(color: Colors.white70, fontSize: 13)),
+          Text(value, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+        ],
+      ),
+    );
   }
 }
