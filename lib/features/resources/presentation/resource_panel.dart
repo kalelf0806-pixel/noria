@@ -56,6 +56,13 @@ class _ResourcePanelState extends State<ResourcePanel> {
       builder: (context, ref, _) {
         final memoryAsync = ref.watch(memorySnapshotProvider);
         final engine = ref.watch(localEngineProvider);
+        final modelState = ref.watch(modelControllerProvider);
+
+        final modelName = switch (modelState) {
+          ModelLoaded(:final name) => name,
+          ModelLoading(:final name) => 'Chargement de $name...',
+          _ => 'Aucun modèle chargé',
+        };
 
         return ListView(
           padding: const EdgeInsets.all(16),
@@ -75,25 +82,17 @@ class _ResourcePanelState extends State<ResourcePanel> {
                     valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
                   ),
                   const SizedBox(height: 12),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text('Process : ${formatBytes(snapshot.appBytes)}', style: const TextStyle(color: Colors.grey, fontSize: 13)),
-                      Text('RAM Système : ${formatPercent(snapshot.usedRatio)}', style: const TextStyle(color: Colors.grey, fontSize: 13)),
-                    ],
-                  ),
+                  _buildMetricRow('Empreinte Process (RSS/App)', formatBytes(snapshot.appBytes)),
+                  _buildMetricRow('RAM Utilisée / Totale', '${formatBytes(snapshot.usedBytes)} / ${formatBytes(snapshot.totalBytes)} (${formatPercent(snapshot.usedRatio)})'),
+                  _buildMetricRow('RAM Disponible', formatBytes(snapshot.availableBytes)),
+                  _buildMetricRow('Alerte Basse Mémoire', snapshot.lowMemory ? '⚠️ OUI' : 'NON (Stable)'),
                   const SizedBox(height: 8),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('Puce : Qualcomm SM8350 (Snapdragon 888)', style: TextStyle(color: Colors.grey, fontSize: 13)),
-                      Text(engine.isLoaded ? '⚡ Actif (NPU)' : '💤 IDLE', style: TextStyle(color: engine.isLoaded ? Colors.greenAccent : Colors.grey, fontSize: 13, fontWeight: FontWeight.bold)),
-                    ],
-                  ),
+                  _buildMetricRow('SoC / Chipset', snapshot.chip ?? 'Qualcomm SM8350 (Snapdragon 888)'),
+                  _buildMetricRow('Unité de Calcul Active', engine.isLoaded ? '⚡ Actif (NPU / FFI)' : '💤 IDLE'),
                 ],
               ),
               loading: () => const LinearProgressIndicator(),
-              error: (_, __) => const Text('Erreur de lecture RAM', style: TextStyle(color: Colors.red)),
+              error: (_, __) => const Text('Erreur de lecture de la télémétrie mémoire', style: TextStyle(color: Colors.red)),
             ),
             const Divider(height: 32),
             const Text(
@@ -106,7 +105,7 @@ class _ResourcePanelState extends State<ResourcePanel> {
               obscureText: true,
               style: const TextStyle(color: Colors.white, fontSize: 13),
               decoration: InputDecoration(
-                hintText: 'Entrer la clé API Gemini...',
+                hintText: 'Entrer la clé API Gemini (ex: AIzaSy...)',
                 hintStyle: TextStyle(color: Colors.grey.shade600),
                 filled: true,
                 fillColor: Colors.grey.shade900,
@@ -123,10 +122,12 @@ class _ResourcePanelState extends State<ResourcePanel> {
               style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.2),
             ),
             const SizedBox(height: 12),
+            _buildMetricRow('Modèle Actif', modelName),
+            const SizedBox(height: 12),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(engine.isLoaded ? 'Statut : Chargé en RAM' : 'Statut : Aucun modèle', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                Text(engine.isLoaded ? 'Statut : Prêt en mémoire' : 'Statut : Aucun modèle', style: const TextStyle(color: Colors.white70, fontSize: 13)),
                 ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: engine.isLoaded ? Colors.red.shade900 : Colors.white,
@@ -141,6 +142,19 @@ class _ResourcePanelState extends State<ResourcePanel> {
           ],
         );
       },
+    );
+  }
+
+  Widget _buildMetricRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: const TextStyle(color: Colors.grey, fontSize: 13)),
+          Text(value, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600, fontFamily: 'monospace')),
+        ],
+      ),
     );
   }
 

@@ -3,6 +3,8 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 
+import '../../inference/application/model_controller.dart';
+
 enum ChatRole { user, assistant }
 
 class ChatModeInfo {
@@ -25,11 +27,12 @@ class ChatMessage {
 }
 
 final chatControllerProvider = StateNotifierProvider<ChatController, List<ChatMessage>>((ref) {
-  return ChatController();
+  return ChatController(ref);
 });
 
 class ChatController extends StateNotifier<List<ChatMessage>> {
-  ChatController() : super([]);
+  ChatController(this._ref) : super([]);
+  final Ref _ref;
 
   Future<void> sendMessage(String messageText, bool isCloudMode, {String modeLabel = 'Standard'}) async {
     final prefs = await SharedPreferences.getInstance();
@@ -49,7 +52,7 @@ class ChatController extends StateNotifier<List<ChatMessage>> {
       if (apiKey.isEmpty) {
         final errorMsg = ChatMessage(
           id: (DateTime.now().millisecondsSinceEpoch + 1).toString(),
-          text: 'Erreur Cloud : Clé API Gemini manquante. Configurez-la dans le panneau de ressources (badge en haut à droite).',
+          text: 'Erreur Cloud : Clé API Gemini manquante. Configurez-la dans le panneau ressources (badge en haut à droite).',
           role: ChatRole.assistant,
           mode: ChatModeInfo('Erreur'),
         );
@@ -58,8 +61,9 @@ class ChatController extends StateNotifier<List<ChatMessage>> {
       }
 
       try {
+        // Utilisation du endpoint moderne géré par v1beta pour Gemini Flash
         final response = await http.post(
-          Uri.parse('https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent'),
+          Uri.parse('https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent'),
           headers: {
             'Content-Type': 'application/json',
             'x-goog-api-key': apiKey,
@@ -98,9 +102,13 @@ class ChatController extends StateNotifier<List<ChatMessage>> {
         state = [...state, errorMsg];
       }
     } else {
+      // Appel du moteur d'inférence local (FFI / Stub)
+      final engine = _ref.read(localEngineProvider);
+      final reply = engine.infer(messageText);
+
       final localReply = ChatMessage(
         id: (DateTime.now().millisecondsSinceEpoch + 1).toString(),
-        text: 'Réponse locale générée pour "$messageText"',
+        text: reply,
         role: ChatRole.assistant,
         mode: ChatModeInfo(modeLabel),
       );
