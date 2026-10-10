@@ -216,7 +216,7 @@ class _ResourcePanelState extends ConsumerState<ResourcePanel> {
       GuardVerdict.block => await _showBlocked(context, guard),
     };
 
-    if (proceed) await controller.load(path);
+    if (proceed) await controller.load(path, backend: ComputeBackend.npu);
   }
 
   Future<bool> _confirm(BuildContext context, RamGuardResult guard) async {

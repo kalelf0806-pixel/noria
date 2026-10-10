@@ -70,7 +70,7 @@ class ModelController extends Notifier<ModelState> {
         );
   }
 
-  Future<void> load(String path, {ComputeBackend backend = ComputeBackend.cpu}) async {
+  Future<void> load(String path, {ComputeBackend backend = ComputeBackend.npu}) async {
     final name = path.split(Platform.pathSeparator).last;
     final guard = await evaluate(path);
     if (guard.verdict == GuardVerdict.block) {
