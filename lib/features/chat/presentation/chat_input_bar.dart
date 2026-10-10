@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../application/chat_controller.dart';
+import '../application/cloud_models_provider.dart';
 
 class ChatInputBar extends ConsumerWidget {
   const ChatInputBar({
@@ -16,20 +17,18 @@ class ChatInputBar extends ConsumerWidget {
   final bool isCloudMode;
   final VoidCallback onSubmitted;
 
-  // Liste complète des modèles Cloud disponibles d'après les endpoints officiels de Google
-  static const List<String> availableCloudModels = [
-    'gemini-3.8-flash',
-    'gemini-3.5-flash',
-    'gemini-2.5-flash',
-    'gemini-2.5-pro',
-    'gemini-3.1-pro-preview',
-    'gemini-3-flash-preview',
-  ];
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = Theme.of(context).colorScheme;
+    final cloudModels = ref.watch(cloudModelsProvider);
     final currentCloudModel = ref.watch(selectedCloudModelProvider);
+
+    // Sélection automatique du premier modèle si aucun n'est sélectionné et que la liste est dispo
+    if (cloudModels.isNotEmpty && (currentCloudModel == null || !cloudModels.any((m) => m.id == currentCloudModel))) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ref.read(selectedCloudModelProvider.notifier).state = cloudModels.first.id;
+      });
+    }
 
     return Container(
       padding: const EdgeInsets.all(12),
@@ -42,7 +41,6 @@ class ChatInputBar extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           if (isCloudMode) ...[
-            // Sélecteur sous forme de liste déroulante (DropdownButton) dépliable
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
               margin: const EdgeInsets.only(bottom: 8),
@@ -57,25 +55,34 @@ class ChatInputBar extends ConsumerWidget {
                     'MODÈLE CLOUD :',
                     style: TextStyle(fontFamily: NoriaTheme.mono, fontSize: 11, fontWeight: FontWeight.bold),
                   ),
-                  DropdownButtonHideUnderline(
-                    child: DropdownButton<String>(
-                      value: availableCloudModels.contains(currentCloudModel) ? currentCloudModel : availableCloudModels.first,
-                      dropdownColor: Colors.black,
-                      style: const TextStyle(fontFamily: NoriaTheme.mono, fontSize: 12, color: Colors.white),
-                      icon: const Icon(Icons.arrow_drop_down, color: Colors.white),
-                      items: availableCloudModels.map((model) {
-                        return DropdownMenuItem<String>(
-                          value: model,
-                          child: Text(model, style: const TextStyle(color: Colors.white)),
-                        );
-                      }).toList(),
-                      onChanged: (val) {
-                        if (val != null) {
-                          ref.read(selectedCloudModelProvider.notifier).state = val;
-                        }
-                      },
+                  if (cloudModels.isEmpty)
+                    const Text(
+                      'Clé API requise (dans le menu ⚙️)',
+                      style: TextStyle(fontFamily: NoriaTheme.mono, fontSize: 11, color: Colors.orangeAccent),
+                    )
+                  else
+                    DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: cloudModels.any((m) => m.id == currentCloudModel) ? currentCloudModel : cloudModels.first.id,
+                        dropdownColor: Colors.black,
+                        style: const TextStyle(fontFamily: NoriaTheme.mono, fontSize: 12, color: Colors.white),
+                        icon: const Icon(Icons.arrow_drop_down, color: Colors.white),
+                        items: cloudModels.map((model) {
+                          return DropdownMenuItem<String>(
+                            value: model.id,
+                            child: Text(
+                              '${model.id} (${model.formattedTokens})',
+                              style: const TextStyle(color: Colors.white),
+                            ),
+                          );
+                        }).toList(),
+                        onChanged: (val) {
+                          if (val != null) {
+                            ref.read(selectedCloudModelProvider.notifier).state = val;
+                          }
+                        },
+                      ),
                     ),
-                  ),
                 ],
               ),
             ),
@@ -87,7 +94,7 @@ class ChatInputBar extends ConsumerWidget {
                   controller: controller,
                   style: const TextStyle(fontFamily: NoriaTheme.mono, fontSize: 13),
                   decoration: InputDecoration(
-                    hintText: isCloudMode ? 'Envoyer à [$currentCloudModel]...' : 'Envoyer au modèle local (FFI)...',
+                    hintText: isCloudMode ? 'Envoyer à [${currentCloudModel ?? "Sélectionner un modèle"}]...' : 'Envoyer au modèle local (FFI)...',
                     hintStyle: TextStyle(color: colors.onSurfaceVariant.withOpacity(0.5)),
                     filled: true,
                     fillColor: colors.surfaceContainerHighest,

@@ -7,6 +7,7 @@ import '../application/resource_providers.dart';
 import '../../inference/domain/inference_mode.dart';
 import '../../inference/application/model_controller.dart';
 import '../../inference/domain/local_inference_engine.dart';
+import '../../chat/application/cloud_models_provider.dart';
 import '../domain/ram_guard.dart';
 import '../../../core/utils/bytes.dart';
 
@@ -34,12 +35,16 @@ class _ResourcePanelState extends State<ResourcePanel> {
     }
   }
 
-  Future<void> _saveApiKey(String value) async {
+  Future<void> _saveApiKey(String value, WidgetRef ref) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('gemini_api_key', value.trim());
+    
+    // Rafraîchir immédiatement la liste des modèles Cloud disponibles
+    ref.read(cloudModelsProvider.notifier).fetchModels();
+
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Clé API Gemini enregistrée avec succès !')),
+        const SnackBar(content: Text('Clé API enregistrée & modèles synchronisés !')),
       );
     }
   }
@@ -111,10 +116,10 @@ class _ResourcePanelState extends State<ResourcePanel> {
                 fillColor: Colors.grey.shade900,
                 suffixIcon: IconButton(
                   icon: const Icon(Icons.save, color: Colors.white, size: 20),
-                  onPressed: () => _saveApiKey(_apiKeyController.text),
+                  onPressed: () => _saveApiKey(_apiKeyController.text, ref),
                 ),
               ),
-              onSubmitted: _saveApiKey,
+              onSubmitted: (val) => _saveApiKey(val, ref),
             ),
             const Divider(height: 32),
             const Text(

@@ -27,8 +27,8 @@ class ChatMessage {
   });
 }
 
-// Provider pour stocker le modèle Cloud sélectionné dans la liste déroulante
-final selectedCloudModelProvider = StateProvider<String>((ref) => 'gemini-3.8-flash');
+// Stocke le modèle sélectionné par l'utilisateur
+final selectedCloudModelProvider = StateProvider<String?>((ref) => null);
 
 final chatControllerProvider = StateNotifierProvider<ChatController, List<ChatMessage>>((ref) {
   return ChatController(ref);
@@ -42,15 +42,13 @@ class ChatController extends StateNotifier<List<ChatMessage>> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('last_message', messageText);
     final apiKey = prefs.getString('gemini_api_key') ?? '';
-
-    // Récupération stricte du modèle sélectionné par l'utilisateur dans l'interface
     final selectedCloudModel = _ref.read(selectedCloudModelProvider);
 
     final userMsg = ChatMessage(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       text: messageText,
       role: ChatRole.user,
-      mode: ChatModeInfo(isCloudMode ? 'CLOUD ($selectedCloudModel)' : 'LOCAL ($modeLabel)'),
+      mode: ChatModeInfo(isCloudMode ? 'CLOUD (${selectedCloudModel ?? "Aucun"})' : 'LOCAL ($modeLabel)'),
     );
 
     state = [...state, userMsg];
@@ -67,46 +65,66 @@ class ChatController extends StateNotifier<List<ChatMessage>> {
         return;
       }
 
-      try {
-        final response = await http.post(
-          Uri.parse('https://generativelanguage.googleapis.com/v1beta/models/$selectedCloudModel:generateContent'),
-          headers: {
-            'Content-Type': 'application/json',
-            'x-goog-api-key': apiKey,
-          },
-          body: jsonEncode({
-            'contents': [
-              {
-                'parts': [{'text': messageText}]
-              }
-            ]
-          }),
-        );
-
-        String replyText;
-        if (response.statusCode == 200) {
-          final data = jsonDecode(response.body);
-          replyText = data['candidates']?[0]?['content']?['parts']?[0]?['text'] ?? 'Réponse Cloud vide';
-        } else {
-          replyText = 'Cloud Erreur (${response.statusCode}) sur [$selectedCloudModel] : ${response.body}';
-        }
-
-        final assistantMsg = ChatMessage(
-          id: (DateTime.now().millisecondsSinceEpoch + 1).toString(),
-          text: replyText,
-          role: ChatRole.assistant,
-          mode: ChatModeInfo(selectedCloudModel),
-        );
-        state = [...state, assistantMsg];
-      } catch (e) {
+      if (selectedCloudModel == null) {
         final errorMsg = ChatMessage(
           id: (DateTime.now().millisecondsSinceEpoch + 1).toString(),
-          text: 'Cloud Exception: $e',
+          text: 'Erreur Cloud : Aucun modèle sélectionné. Veuillez d\'abord configurer votre clé API pour charger les modèles disponibles.',
           role: ChatRole.assistant,
           mode: ChatModeInfo('Erreur'),
         );
         state = [...state, errorMsg];
+        return;
       }
+
+      String? replyText;
+      int statusCode = 500;
+      String lastErrorBody = '';
+
+      // Tentative avec mécanisme de réessai automatique (Retry) en cas de 503 (High demand)
+      for (int attempt = 1; attempt <= 2; attempt++) {
+        try {
+          final response = await http.post(
+            Uri.parse('https://generativelanguage.googleapis.com/v1beta/models/$selectedCloudModel:generateContent'),
+            headers: {
+              'Content-Type': 'application/json',
+              'x-goog-api-key': apiKey,
+            },
+            body: jsonEncode({
+              'contents': [
+                {
+                  'parts': [{'text': messageText}]
+                }
+              ]
+            }),
+          );
+
+          statusCode = response.statusCode;
+          if (statusCode == 200) {
+            final data = jsonDecode(response.body);
+            replyText = data['candidates']?[0]?['content']?['parts']?[0]?['text'] ?? 'Réponse Cloud vide';
+            break;
+          } else {
+            lastErrorBody = response.body;
+            if (statusCode == 503 && attempt == 1) {
+              // Attente courte avant de retenter si le serveur est surchargé
+              await Future.delayed(const Duration(milliseconds: 1500));
+              continue;
+            }
+          }
+        } catch (e) {
+          lastErrorBody = e.toString();
+        }
+      }
+
+      final finalReply = replyText ?? 'Cloud Erreur ($statusCode) sur [$selectedCloudModel] : $lastErrorBody';
+
+      final assistantMsg = ChatMessage(
+        id: (DateTime.now().millisecondsSinceEpoch + 1).toString(),
+        text: finalReply,
+        role: ChatRole.assistant,
+        mode: ChatModeInfo(selectedCloudModel),
+      );
+      state = [...state, assistantMsg];
     } else {
       // Appel du moteur local FFI natif
       final engine = _ref.read(localEngineProvider);
