@@ -57,98 +57,88 @@ class _ResourcePanelState extends State<ResourcePanel> {
         final memoryAsync = ref.watch(memorySnapshotProvider);
         final engine = ref.watch(localEngineProvider);
 
-        return Container(
+        return ListView(
           padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.black,
-            border: Border(top: BorderSide(color: Colors.grey.shade800)),
-          ),
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                  'RESSOURCES & TÉLÉMÉTRIE',
-                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1.2),
-                ),
-                const SizedBox(height: 12),
-                memoryAsync.when(
-                  data: (snapshot) => Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'TÉLÉMÉTRIE MATÉRIELLE',
+              style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.2),
+            ),
+            const SizedBox(height: 12),
+            memoryAsync.when(
+              data: (snapshot) => Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  LinearProgressIndicator(
+                    value: snapshot.usedRatio,
+                    backgroundColor: Colors.grey.shade900,
+                    valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      LinearProgressIndicator(
-                        value: snapshot.usedRatio,
-                        backgroundColor: Colors.grey.shade900,
-                        valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text('Process : ${formatBytes(snapshot.appBytes)}', style: const TextStyle(color: Colors.grey, fontSize: 12)),
-                          Text('RAM Système : ${formatPercent(snapshot.usedRatio)}', style: const TextStyle(color: Colors.grey, fontSize: 12)),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text('Puce : Qualcomm SM8350 (Snapdragon 888)', style: TextStyle(color: Colors.grey, fontSize: 12)),
-                          Text(engine.isLoaded ? '⚡ Actif (NPU)' : '💤 IDLE', style: TextStyle(color: engine.isLoaded ? Colors.greenAccent : Colors.grey, fontSize: 12, fontWeight: FontWeight.bold)),
-                        ],
-                      ),
+                      Text('Process : ${formatBytes(snapshot.appBytes)}', style: const TextStyle(color: Colors.grey, fontSize: 13)),
+                      Text('RAM Système : ${formatPercent(snapshot.usedRatio)}', style: const TextStyle(color: Colors.grey, fontSize: 13)),
                     ],
                   ),
-                  loading: () => const LinearProgressIndicator(),
-                  error: (_, __) => const Text('Erreur de lecture RAM', style: TextStyle(color: Colors.red)),
-                ),
-                const Divider(color: Colors.grey, height: 24),
-                const Text(
-                  'CONFIGURATION API CLOUD',
-                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1.2),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _apiKeyController,
-                  obscureText: true,
-                  style: const TextStyle(color: Colors.white, fontSize: 12),
-                  decoration: InputDecoration(
-                    hintText: 'Entrer la clé API Gemini...',
-                    hintStyle: TextStyle(color: Colors.grey.shade600),
-                    filled: true,
-                    fillColor: Colors.grey.shade900,
-                    suffixIcon: IconButton(
-                      icon: const Icon(Icons.save, color: Colors.white, size: 18),
-                      onPressed: () => _saveApiKey(_apiKeyController.text),
-                    ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Puce : Qualcomm SM8350 (Snapdragon 888)', style: TextStyle(color: Colors.grey, fontSize: 13)),
+                      Text(engine.isLoaded ? '⚡ Actif (NPU)' : '💤 IDLE', style: TextStyle(color: engine.isLoaded ? Colors.greenAccent : Colors.grey, fontSize: 13, fontWeight: FontWeight.bold)),
+                    ],
                   ),
-                  onSubmitted: _saveApiKey,
+                ],
+              ),
+              loading: () => const LinearProgressIndicator(),
+              error: (_, __) => const Text('Erreur de lecture RAM', style: TextStyle(color: Colors.red)),
+            ),
+            const Divider(height: 32),
+            const Text(
+              'CONFIGURATION CLOUD (GEMINI API)',
+              style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.2),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _apiKeyController,
+              obscureText: true,
+              style: const TextStyle(color: Colors.white, fontSize: 13),
+              decoration: InputDecoration(
+                hintText: 'Entrer la clé API Gemini...',
+                hintStyle: TextStyle(color: Colors.grey.shade600),
+                filled: true,
+                fillColor: Colors.grey.shade900,
+                suffixIcon: IconButton(
+                  icon: const Icon(Icons.save, color: Colors.white, size: 20),
+                  onPressed: () => _saveApiKey(_apiKeyController.text),
                 ),
-                const Divider(color: Colors.grey, height: 24),
-                const Text(
-                  'MODÈLE LOCAL (GGUF / LITERTLM)',
-                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1.2),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(engine.isLoaded ? 'Statut : Chargé en RAM' : 'Statut : Aucun modèle', style: const TextStyle(color: Colors.white70, fontSize: 13)),
-                    ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: engine.isLoaded ? Colors.red.shade900 : Colors.white,
-                        foregroundColor: engine.isLoaded ? Colors.white : Colors.black,
-                      ),
-                      onPressed: () => engine.isLoaded ? _ejectModel(ref) : _pickAndLoad(context, ref),
-                      icon: Icon(engine.isLoaded ? Icons.eject : Icons.folder_open, size: 16),
-                      label: Text(engine.isLoaded ? 'EJECT' : 'CHARGER MODÈLE'),
-                    ),
-                  ],
+              ),
+              onSubmitted: _saveApiKey,
+            ),
+            const Divider(height: 32),
+            const Text(
+              'MOTEUR LOCAL (GGUF / LITERTLM)',
+              style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.2),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(engine.isLoaded ? 'Statut : Chargé en RAM' : 'Statut : Aucun modèle', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: engine.isLoaded ? Colors.red.shade900 : Colors.white,
+                    foregroundColor: engine.isLoaded ? Colors.white : Colors.black,
+                  ),
+                  onPressed: () => engine.isLoaded ? _ejectModel(ref) : _pickAndLoad(context, ref),
+                  icon: Icon(engine.isLoaded ? Icons.eject : Icons.folder_open, size: 16),
+                  label: Text(engine.isLoaded ? 'EJECT' : 'CHARGER MODÈLE'),
                 ),
               ],
             ),
-          ),
+          ],
         );
       },
     );

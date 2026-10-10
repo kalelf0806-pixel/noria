@@ -35,10 +35,19 @@ class ResourceBadge extends ConsumerWidget {
       button: true,
       label: 'Moniteur de ressources : $ramLabel utilisés, unité $chipLabel',
       child: InkWell(
-        onTap: () => showModalBottomSheet<void>(
-          context: context,
-          isScrollControlled: true,
-          builder: (_) => const ResourcePanel(),
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => const Scaffold(
+              body: SafeArea(
+                child: Column(
+                  children: [
+                    _ResourcePageHeader(),
+                    Expanded(child: ResourcePanel()),
+                  ],
+                ),
+              ),
+            ),
+          ),
         ),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -62,6 +71,35 @@ class ResourceBadge extends ConsumerWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _ResourcePageHeader extends StatelessWidget {
+  const _ResourcePageHeader();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          const Text(
+            'RESSOURCES & CONFIG',
+            style: TextStyle(
+              fontFamily: NoriaTheme.mono,
+              fontWeight: FontWeight.w800,
+              fontSize: 16,
+              letterSpacing: 2,
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.close),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+        ],
       ),
     );
   }
