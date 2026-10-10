@@ -45,7 +45,7 @@ class ResourcePanel extends ConsumerWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('Process : ${formatBytes(snapshot.processRss)}', style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                    Text('Process : ${formatBytes(snapshot.appBytes)}', style: const TextStyle(color: Colors.grey, fontSize: 12)),
                     Text('RAM Système : ${formatPercent(snapshot.usedRatio)}', style: const TextStyle(color: Colors.grey, fontSize: 12)),
                   ],
                 ),
