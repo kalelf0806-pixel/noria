@@ -7,7 +7,7 @@ import '../../inference/domain/inference_mode.dart';
 import '../../inference/application/model_controller.dart';
 import '../../inference/domain/local_inference_engine.dart';
 import '../domain/ram_guard.dart';
-import '../../core/utils/bytes.dart';
+import '../../../core/utils/bytes.dart';
 
 class ResourcePanel extends ConsumerWidget {
   const ResourcePanel({super.key});
