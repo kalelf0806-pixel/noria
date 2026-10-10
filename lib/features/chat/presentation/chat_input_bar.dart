@@ -1,29 +1,49 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:io';
 
 import '../../../core/theme/app_theme.dart';
 import '../application/chat_controller.dart';
 import '../application/cloud_models_provider.dart';
 
-class ChatInputBar extends ConsumerWidget {
+class ChatInputBar extends ConsumerStatefulWidget {
   const ChatInputBar({
     super.key,
     required this.controller,
     required this.isCloudMode,
     required this.onSubmitted,
+    this.onImageSelected,
   });
 
   final TextEditingController controller;
   final bool isCloudMode;
   final VoidCallback onSubmitted;
+  final ValueChanged<String?>? onImageSelected;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ChatInputBar> createState() => _ChatInputBarState();
+}
+
+class _ChatInputBarState extends ConsumerState<ChatInputBar> {
+  String? _selectedImagePath;
+  final ImagePicker _picker = ImagePicker();
+
+  Future<void> _pickImage(ImageSource source) async {
+    final XFile? image = await _picker.pickImage(source: source);
+    if (image != null) {
+      setState(() {
+        _selectedImagePath = image.path;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final cloudModels = ref.watch(cloudModelsProvider);
     final currentCloudModel = ref.watch(selectedCloudModelProvider);
 
-    // Sélection automatique du premier modèle si aucun n'est sélectionné et que la liste est dispo
     if (cloudModels.isNotEmpty && (currentCloudModel == null || !cloudModels.any((m) => m.id == currentCloudModel))) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         ref.read(selectedCloudModelProvider.notifier).state = cloudModels.first.id;
@@ -40,7 +60,7 @@ class ChatInputBar extends ConsumerWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (isCloudMode) ...[
+          if (widget.isCloudMode) ...[
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
               margin: const EdgeInsets.only(bottom: 8),
@@ -57,7 +77,7 @@ class ChatInputBar extends ConsumerWidget {
                   ),
                   if (cloudModels.isEmpty)
                     const Text(
-                      'Clé API requise (dans le menu ⚙️)',
+                      'Clé API requise (menu ⚙️)',
                       style: TextStyle(fontFamily: NoriaTheme.mono, fontSize: 11, color: Colors.orangeAccent),
                     )
                   else
@@ -87,14 +107,48 @@ class ChatInputBar extends ConsumerWidget {
               ),
             ),
           ],
+          if (_selectedImagePath != null) ...[
+            Container(
+              padding: const EdgeInsets.all(6),
+              margin: const EdgeInsets.only(bottom: 8),
+              decoration: BoxDecoration(
+                border: Border.all(color: colors.outline),
+              ),
+              child: Row(
+                children: [
+                  Image.file(File(_selectedImagePath!), width: 40, height: 40, fit: BoxFit.cover),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text('Image jointe prête', style: TextStyle(fontFamily: NoriaTheme.mono, fontSize: 11)),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, size: 18),
+                    onPressed: () => setState(() => _selectedImagePath = null),
+                  ),
+                ],
+              ),
+            ),
+          ],
           Row(
             children: [
+              if (widget.isCloudMode) ...[
+                IconButton(
+                  icon: const Icon(Icons.image_outlined),
+                  tooltip: 'Joindre une image',
+                  onPressed: () => _pickImage(ImageSource.gallery),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.camera_alt_outlined),
+                  tooltip: 'Prendre une photo',
+                  onPressed: () => _pickImage(ImageSource.camera),
+                ),
+              ],
               Expanded(
                 child: TextField(
-                  controller: controller,
+                  controller: widget.controller,
                   style: const TextStyle(fontFamily: NoriaTheme.mono, fontSize: 13),
                   decoration: InputDecoration(
-                    hintText: isCloudMode ? 'Envoyer à [${currentCloudModel ?? "Sélectionner un modèle"}]...' : 'Envoyer au modèle local (FFI)...',
+                    hintText: widget.isCloudMode ? 'Envoyer au Cloud (multimodal)...' : 'Envoyer au modèle local (FFI)...',
                     hintStyle: TextStyle(color: colors.onSurfaceVariant.withOpacity(0.5)),
                     filled: true,
                     fillColor: colors.surfaceContainerHighest,
@@ -112,12 +166,28 @@ class ChatInputBar extends ConsumerWidget {
                     ),
                     contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   ),
-                  onSubmitted: (_) => onSubmitted(),
+                  onSubmitted: (_) {
+                    widget.onSubmitted();
+                    setState(() => _selectedImagePath = null);
+                  },
                 ),
               ),
               const SizedBox(width: 8),
               IconButton.filled(
-                onPressed: onSubmitted,
+                onPressed: () {
+                  // Passer l'image au controller si besoin
+                  if (_selectedImagePath != null) {
+                    ref.read(chatControllerProvider.notifier).sendMessage(
+                      widget.controller.text.trim(),
+                      widget.isCloudMode,
+                      imagePath: _selectedImagePath,
+                    );
+                    widget.controller.clear();
+                    setState(() => _selectedImagePath = null);
+                  } else {
+                    widget.onSubmitted();
+                  }
+                },
                 style: IconButton.styleFrom(
                   backgroundColor: colors.onSurface,
                   foregroundColor: colors.surface,

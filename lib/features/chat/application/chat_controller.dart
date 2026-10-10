@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
+import 'dart:io';
 
 import '../../inference/application/model_controller.dart';
 import '../../inference/domain/local_inference_engine.dart';
@@ -18,16 +19,17 @@ class ChatMessage {
   final String text;
   final ChatRole role;
   final ChatModeInfo mode;
+  final String? imagePath;
 
   ChatMessage({
     required this.id,
     required this.text,
     required this.role,
     required this.mode,
+    this.imagePath,
   });
 }
 
-// Stocke le modèle sélectionné par l'utilisateur
 final selectedCloudModelProvider = StateProvider<String?>((ref) => null);
 
 final chatControllerProvider = StateNotifierProvider<ChatController, List<ChatMessage>>((ref) {
@@ -38,7 +40,7 @@ class ChatController extends StateNotifier<List<ChatMessage>> {
   ChatController(this._ref) : super([]);
   final Ref _ref;
 
-  Future<void> sendMessage(String messageText, bool isCloudMode, {String modeLabel = 'Standard'}) async {
+  Future<void> sendMessage(String messageText, bool isCloudMode, {String? imagePath, String modeLabel = 'Standard'}) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('last_message', messageText);
     final apiKey = prefs.getString('gemini_api_key') ?? '';
@@ -48,7 +50,8 @@ class ChatController extends StateNotifier<List<ChatMessage>> {
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       text: messageText,
       role: ChatRole.user,
-      mode: ChatModeInfo(isCloudMode ? 'CLOUD (${selectedCloudModel ?? "Aucun"})' : 'LOCAL ($modeLabel)'),
+      mode: ChatModeInfo(isCloudMode ? 'CLOUD (${selectedCloudModel ?? "Standard"})' : 'LOCAL ($modeLabel)'),
+      imagePath: imagePath,
     );
 
     state = [...state, userMsg];
@@ -68,7 +71,7 @@ class ChatController extends StateNotifier<List<ChatMessage>> {
       if (selectedCloudModel == null) {
         final errorMsg = ChatMessage(
           id: (DateTime.now().millisecondsSinceEpoch + 1).toString(),
-          text: 'Erreur Cloud : Aucun modèle sélectionné. Veuillez d\'abord configurer votre clé API pour charger les modèles disponibles.',
+          text: 'Erreur Cloud : Aucun modèle sélectionné.',
           role: ChatRole.assistant,
           mode: ChatModeInfo('Erreur'),
         );
@@ -76,55 +79,60 @@ class ChatController extends StateNotifier<List<ChatMessage>> {
         return;
       }
 
-      String? replyText;
-      int statusCode = 500;
-      String lastErrorBody = '';
+      try {
+        // Construction de la charge utile (Payload) multimodale pour l'API Gemini
+        final List<dynamic> parts = [{'text': messageText.isEmpty ? 'Décris cette image.' : messageText}];
 
-      // Tentative avec mécanisme de réessai automatique (Retry) en cas de 503 (High demand)
-      for (int attempt = 1; attempt <= 2; attempt++) {
-        try {
-          final response = await http.post(
-            Uri.parse('https://generativelanguage.googleapis.com/v1beta/models/$selectedCloudModel:generateContent'),
-            headers: {
-              'Content-Type': 'application/json',
-              'x-goog-api-key': apiKey,
-            },
-            body: jsonEncode({
-              'contents': [
-                {
-                  'parts': [{'text': messageText}]
-                }
-              ]
-            }),
-          );
-
-          statusCode = response.statusCode;
-          if (statusCode == 200) {
-            final data = jsonDecode(response.body);
-            replyText = data['candidates']?[0]?['content']?['parts']?[0]?['text'] ?? 'Réponse Cloud vide';
-            break;
-          } else {
-            lastErrorBody = response.body;
-            if (statusCode == 503 && attempt == 1) {
-              // Attente courte avant de retenter si le serveur est surchargé
-              await Future.delayed(const Duration(milliseconds: 1500));
-              continue;
+        if (imagePath != null && File(imagePath).existsSync()) {
+          final bytes = await File(imagePath).readAsBytes();
+          final base64Image = base64Encode(bytes);
+          parts.add({
+            'inline_data': {
+              'mime_type': 'image/jpeg',
+              'data': base64Image,
             }
-          }
-        } catch (e) {
-          lastErrorBody = e.toString();
+          });
         }
+
+        final response = await http.post(
+          Uri.parse('https://generativelanguage.googleapis.com/v1beta/models/$selectedCloudModel:generateContent'),
+          headers: {
+            'Content-Type': 'application/json',
+            'x-goog-api-key': apiKey,
+          },
+          body: jsonEncode({
+            'contents': [
+              {
+                'parts': parts,
+              }
+            ]
+          }),
+        );
+
+        String replyText;
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body);
+          replyText = data['candidates']?[0]?['content']?['parts']?[0]?['text'] ?? 'Réponse Cloud vide';
+        } else {
+          replyText = 'Cloud Erreur (${response.statusCode}) : ${response.body}';
+        }
+
+        final assistantMsg = ChatMessage(
+          id: (DateTime.now().millisecondsSinceEpoch + 1).toString(),
+          text: replyText,
+          role: ChatRole.assistant,
+          mode: ChatModeInfo(selectedCloudModel),
+        );
+        state = [...state, assistantMsg];
+      } catch (e) {
+        final errorMsg = ChatMessage(
+          id: (DateTime.now().millisecondsSinceEpoch + 1).toString(),
+          text: 'Cloud Exception: $e',
+          role: ChatRole.assistant,
+          mode: ChatModeInfo('Erreur'),
+        );
+        state = [...state, errorMsg];
       }
-
-      final finalReply = replyText ?? 'Cloud Erreur ($statusCode) sur [$selectedCloudModel] : $lastErrorBody';
-
-      final assistantMsg = ChatMessage(
-        id: (DateTime.now().millisecondsSinceEpoch + 1).toString(),
-        text: finalReply,
-        role: ChatRole.assistant,
-        mode: ChatModeInfo(selectedCloudModel),
-      );
-      state = [...state, assistantMsg];
     } else {
       // Appel du moteur local FFI natif
       final engine = _ref.read(localEngineProvider);
