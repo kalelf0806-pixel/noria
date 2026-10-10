@@ -22,6 +22,10 @@ class _ChatInputBarState extends State<ChatInputBar> {
 
   @override
   Widget build(BuildContext context) {
+    final hint = widget.isCloudMode
+        ? 'Envoyer à [$_activeCloudModel]...'
+        : 'Envoyer à [$_activeLocalFeature]...';
+
     return Container(
       padding: const EdgeInsets.all(12),
       color: Colors.black,
@@ -61,10 +65,7 @@ class _ChatInputBarState extends State<ChatInputBar> {
                   controller: widget.controller,
                   style: const TextStyle(color: Colors.white),
                   decoration: InputDecoration(
-                    hintText: widget.isCloudMode
-                        .toString() // Just to suppress warning
-                        ? 'Envoyer à [${widget.isCloudMode ? _activeCloudModel : _activeLocalFeature}]...'
-                        : 'Message...',
+                    hintText: hint,
                     hintStyle: TextStyle(color: Colors.grey.shade600),
                     filled: true,
                     fillColor: Colors.grey.shade900,
