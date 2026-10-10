@@ -199,9 +199,9 @@ class _ResourcePanelState extends ConsumerState<ResourcePanel> {
     final path = picked?.files.single.path;
     if (path == null || !context.mounted) return;
 
-    if (!path.toLowerCase().endsWith('.gguf')) {
+    if (!path.toLowerCase().endsWith('.gguf') && !path.toLowerCase().endsWith('.litertlm')) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Sélectionnez un fichier .gguf')),
+        const SnackBar(content: Text('Sélectionnez un fichier .gguf ou .litertlm')),
       );
       return;
     }
