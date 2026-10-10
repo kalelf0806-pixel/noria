@@ -8,6 +8,7 @@ import '../../inference/application/model_controller.dart';
 import '../../inference/domain/inference_mode.dart';
 import 'chat_input_bar.dart';
 import 'message_list.dart';
+import 'mode_switch.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   const ChatScreen({super.key});
@@ -53,6 +54,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         top: false,
         child: Column(
           children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 12, 16, 0),
+              child: ModeSwitch(),
+            ),
             const Expanded(child: MessageList()),
             ChatInputBar(
               controller: _textController,

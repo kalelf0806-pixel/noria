@@ -34,6 +34,7 @@ class ChatController extends StateNotifier<List<ChatMessage>> {
   Future<void> sendMessage(String messageText, bool isCloudMode, {String modeLabel = 'Standard'}) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('last_message', messageText);
+    final apiKey = prefs.getString('gemini_api_key') ?? '';
 
     final userMsg = ChatMessage(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -45,10 +46,24 @@ class ChatController extends StateNotifier<List<ChatMessage>> {
     state = [...state, userMsg];
 
     if (isCloudMode) {
+      if (apiKey.isEmpty) {
+        final errorMsg = ChatMessage(
+          id: (DateTime.now().millisecondsSinceEpoch + 1).toString(),
+          text: 'Erreur Cloud : Clé API Gemini manquante. Configurez-la dans le panneau de ressources (badge en haut à droite).',
+          role: ChatRole.assistant,
+          mode: ChatModeInfo('Erreur'),
+        );
+        state = [...state, errorMsg];
+        return;
+      }
+
       try {
         final response = await http.post(
           Uri.parse('https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent'),
-          headers: {'Content-Type': 'application/json'},
+          headers: {
+            'Content-Type': 'application/json',
+            'x-goog-api-key': apiKey,
+          },
           body: jsonEncode({
             'contents': [
               {
@@ -63,7 +78,7 @@ class ChatController extends StateNotifier<List<ChatMessage>> {
           final data = jsonDecode(response.body);
           replyText = data['candidates']?[0]?['content']?['parts']?[0]?['text'] ?? 'Réponse Cloud vide';
         } else {
-          replyText = 'Cloud Erreur: ${response.statusCode}';
+          replyText = 'Cloud Erreur (${response.statusCode}) : ${response.body}';
         }
 
         final assistantMsg = ChatMessage(
