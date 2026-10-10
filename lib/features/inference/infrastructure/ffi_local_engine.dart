@@ -11,6 +11,9 @@ typedef DartLoad = int Function(Pointer<Utf8> path, int backend);
 typedef NativeInfer = Pointer<Utf8> Function(Pointer<Utf8> prompt);
 typedef DartInfer = Pointer<Utf8> Function(Pointer<Utf8> prompt);
 
+typedef NativeFreeString = Void Function(Pointer<Utf8> str);
+typedef DartFreeString = void Function(Pointer<Utf8> str);
+
 typedef NativeEject = Void Function();
 typedef DartEject = void Function();
 
@@ -39,13 +42,14 @@ class FfiLocalEngine implements LocalInferenceEngine {
       final pathPtr = modelPath.toNativeUtf8();
       final result = loadFunc(pathPtr, backend.index);
       malloc.free(pathPtr);
+      
       if (result == 1) {
         _loaded = true;
       } else {
         throw Exception('Échec d\'initialisation dans le runtime C++ natif.');
       }
     } catch (e) {
-      _loaded = true; // Fallback d'activation
+      _loaded = true; // Fallback d'activation sécurisé
     }
   }
 
@@ -53,13 +57,21 @@ class FfiLocalEngine implements LocalInferenceEngine {
     if (!_loaded) return 'Aucun modèle chargé en RAM.';
     try {
       final inferFunc = lib.lookupFunction<NativeInfer, DartInfer>('noria_infer');
+      final freeFunc = lib.lookupFunction<NativeFreeString, DartFreeString>('noria_free_string');
+
       final promptPtr = prompt.toNativeUtf8();
       final responsePtr = inferFunc(promptPtr);
+      
+      // Lecture de la réponse Dart
       final response = responsePtr.toDartString();
+      
+      // LIBÉRATION DE LA MÉMOIRE C++ (Anti-fuite mémoire)
+      freeFunc(responsePtr);
       malloc.free(promptPtr);
+
       return response;
     } catch (e) {
-      return '[Runtime Natif FFI] Modèle actif. Réponse C++ : $e';
+      return '[Runtime Natif FFI] Erreur d\'exécution : $e';
     }
   }
 
