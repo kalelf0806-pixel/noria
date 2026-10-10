@@ -1,135 +1,126 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-class ChatInputBar extends StatefulWidget {
-  final TextEditingController controller;
-  final VoidCallback onSubmitted;
-  final bool isCloudMode;
+import '../../../core/theme/app_theme.dart';
+import '../application/chat_controller.dart';
 
+class ChatInputBar extends ConsumerWidget {
   const ChatInputBar({
     super.key,
     required this.controller,
-    required this.onSubmitted,
     required this.isCloudMode,
+    required this.onSubmitted,
   });
 
-  @override
-  State<ChatInputBar> createState() => _ChatInputBarState();
-}
+  final TextEditingController controller;
+  final bool isCloudMode;
+  final VoidCallback onSubmitted;
 
-class _ChatInputBarState extends State<ChatInputBar> {
-  String _activeLocalFeature = 'Standard';
-  String _activeCloudModel = 'Gemini 3.8 Live';
+  // Liste complète des modèles Cloud disponibles d'après les endpoints officiels de Google
+  static const List<String> availableCloudModels = [
+    'gemini-3.8-flash',
+    'gemini-3.5-flash',
+    'gemini-2.5-flash',
+    'gemini-2.5-pro',
+    'gemini-3.1-pro-preview',
+    'gemini-3-flash-preview',
+  ];
 
   @override
-  Widget build(BuildContext context) {
-    final hint = widget.isCloudMode
-        ? 'Envoyer à [$_activeCloudModel]...'
-        : 'Envoyer à [$_activeLocalFeature]...';
+  Widget build(BuildContext context, WidgetRef ref) {
+    final colors = Theme.of(context).colorScheme;
+    final currentCloudModel = ref.watch(selectedCloudModelProvider);
 
     return Container(
       padding: const EdgeInsets.all(12),
-      color: Colors.black,
+      decoration: BoxDecoration(
+        color: colors.surface,
+        border: Border(top: BorderSide(color: colors.outline, width: NoriaTheme.borderWidth)),
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Sélecteur de capacités selon le mode (Local vs Cloud)
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: widget.isCloudMode
-                  ? [
-                      const Text('☁️ Cloud Live API : ', style: TextStyle(color: Colors.grey, fontSize: 11)),
-                      _buildChip('Gemini 3.8 Live', Icons.bolt),
-                      _buildChip('Gemini 3.8 Thinking', Icons.psychology),
-                      _buildChip('Gemini 3 Flash Live', Icons.flash_on),
-                      _buildChip('Gemini 2.5 Audio Dialog', Icons.record_voice_over),
-                      _buildChip('Gemini 3.5 Live Translate', Icons.translate),
-                      _buildChip('Gemini 3.5 Transcribe Live', Icons.closed_caption),
-                    ]
-                  : [
-                      const Text('⚡ Gemma 4 Local : ', style: TextStyle(color: Colors.grey, fontSize: 11)),
-                      _buildLocalChip('Standard', Icons.chat),
-                      _buildLocalChip('Vision & OCR (Bounding Boxes)', Icons.document_scanner),
-                      _buildLocalChip('Audio Natif (Voix)', Icons.mic),
-                      _buildLocalChip('Traitement Vidéo (1 fps)', Icons.videocam),
-                      _buildLocalChip('Thinking Mode (128K Ctx)', Icons.psychology),
-                    ],
+          if (isCloudMode) ...[
+            // Sélecteur sous forme de liste déroulante (DropdownButton) dépliable
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              margin: const EdgeInsets.only(bottom: 8),
+              decoration: BoxDecoration(
+                color: colors.surfaceContainerHighest,
+                border: Border.all(color: colors.outline, width: NoriaTheme.borderWidth),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'MODÈLE CLOUD :',
+                    style: TextStyle(fontFamily: NoriaTheme.mono, fontSize: 11, fontWeight: FontWeight.bold),
+                  ),
+                  DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: availableCloudModels.contains(currentCloudModel) ? currentCloudModel : availableCloudModels.first,
+                      dropdownColor: Colors.black,
+                      style: const TextStyle(fontFamily: NoriaTheme.mono, fontSize: 12, color: Colors.white),
+                      icon: const Icon(Icons.arrow_drop_down, color: Colors.white),
+                      items: availableCloudModels.map((model) {
+                        return DropdownMenuItem<String>(
+                          value: model,
+                          child: Text(model, style: const TextStyle(color: Colors.white)),
+                        );
+                      }).toList(),
+                      onChanged: (val) {
+                        if (val != null) {
+                          ref.read(selectedCloudModelProvider.notifier).state = val;
+                        }
+                      },
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
+          ],
           Row(
             children: [
               Expanded(
                 child: TextField(
-                  controller: widget.controller,
-                  style: const TextStyle(color: Colors.white),
+                  controller: controller,
+                  style: const TextStyle(fontFamily: NoriaTheme.mono, fontSize: 13),
                   decoration: InputDecoration(
-                    hintText: hint,
-                    hintStyle: TextStyle(color: Colors.grey.shade600),
+                    hintText: isCloudMode ? 'Envoyer à [$currentCloudModel]...' : 'Envoyer au modèle local (FFI)...',
+                    hintStyle: TextStyle(color: colors.onSurfaceVariant.withOpacity(0.5)),
                     filled: true,
-                    fillColor: Colors.grey.shade900,
+                    fillColor: colors.surfaceContainerHighest,
                     border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide.none,
+                      borderRadius: BorderRadius.zero,
+                      borderSide: BorderSide(color: colors.outline, width: NoriaTheme.borderWidth),
                     ),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.zero,
+                      borderSide: BorderSide(color: colors.outline, width: NoriaTheme.borderWidth),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.zero,
+                      borderSide: BorderSide(color: colors.onSurface, width: NoriaTheme.borderWidth),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   ),
-                  onSubmitted: (_) => widget.onSubmitted(),
+                  onSubmitted: (_) => onSubmitted(),
                 ),
               ),
               const SizedBox(width: 8),
-              IconButton(
+              IconButton.filled(
+                onPressed: onSubmitted,
                 style: IconButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: Colors.black,
+                  backgroundColor: colors.onSurface,
+                  foregroundColor: colors.surface,
+                  shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
                 ),
-                onPressed: widget.onSubmitted,
                 icon: const Icon(Icons.arrow_upward),
               ),
             ],
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildLocalChip(String label, IconData icon) {
-    final isSelected = _activeLocalFeature == label;
-    return Padding(
-      padding: const EdgeInsets.only(right: 6),
-      child: ChoiceChip(
-        label: Text(label, style: TextStyle(fontSize: 11, color: isSelected ? Colors.black : Colors.white)),
-        selected: isSelected,
-        selectedColor: Colors.white,
-        backgroundColor: Colors.grey.shade900,
-        avatar: Icon(icon, size: 14, color: isSelected ? Colors.black : Colors.white70),
-        onSelected: (selected) {
-          setState(() => _activeLocalFeature = label);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Mode Local activé : $label')),
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _buildChip(String label, IconData icon) {
-    final isSelected = _activeCloudModel == label;
-    return Padding(
-      padding: const EdgeInsets.only(right: 6),
-      child: ChoiceChip(
-        label: Text(label, style: TextStyle(fontSize: 11, color: isSelected ? Colors.black : Colors.white)),
-        selected: isSelected,
-        selectedColor: Colors.white,
-        backgroundColor: Colors.grey.shade900,
-        avatar: Icon(icon, size: 14, color: isSelected ? Colors.black : Colors.white70),
-        onSelected: (selected) {
-          setState(() => _activeCloudModel = label);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Modèle Cloud actif : $label (Quota illimité)')),
-          );
-        },
       ),
     );
   }

@@ -27,6 +27,9 @@ class ChatMessage {
   });
 }
 
+// Provider pour stocker le modèle Cloud sélectionné dans la liste déroulante
+final selectedCloudModelProvider = StateProvider<String>((ref) => 'gemini-3.8-flash');
+
 final chatControllerProvider = StateNotifierProvider<ChatController, List<ChatMessage>>((ref) {
   return ChatController(ref);
 });
@@ -35,41 +38,19 @@ class ChatController extends StateNotifier<List<ChatMessage>> {
   ChatController(this._ref) : super([]);
   final Ref _ref;
 
-  /// Découvre dynamiquement le premier modèle Cloud supportant generateContent
-  Future<String?> _discoverActiveModel(String apiKey) async {
-    try {
-      final response = await http.get(
-        Uri.parse('https://generativelanguage.googleapis.com/v1beta/models?key=$apiKey'),
-      );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final models = data['models'] as List<dynamic>?;
-        if (models != null) {
-          for (final m in models) {
-            final name = m['name'] as String?; // ex: "models/gemini-1.5-flash" ou "models/gemini-2.5-flash"
-            final methods = m['supportedGenerationMethods'] as List<dynamic>?;
-            if (name != null && methods != null && methods.contains('generateContent')) {
-              // On retire le préfixe "models/" si présent pour l'URL d'appel
-              return name.replaceFirst('models/', '');
-            }
-          }
-        }
-      }
-    } catch (_) {}
-    return null;
-  }
-
   Future<void> sendMessage(String messageText, bool isCloudMode, {String modeLabel = 'Standard'}) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('last_message', messageText);
     final apiKey = prefs.getString('gemini_api_key') ?? '';
 
+    // Récupération stricte du modèle sélectionné par l'utilisateur dans l'interface
+    final selectedCloudModel = _ref.read(selectedCloudModelProvider);
+
     final userMsg = ChatMessage(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       text: messageText,
       role: ChatRole.user,
-      mode: ChatModeInfo(isCloudMode ? 'CLOUD ($modeLabel)' : 'LOCAL ($modeLabel)'),
+      mode: ChatModeInfo(isCloudMode ? 'CLOUD ($selectedCloudModel)' : 'LOCAL ($modeLabel)'),
     );
 
     state = [...state, userMsg];
@@ -78,7 +59,7 @@ class ChatController extends StateNotifier<List<ChatMessage>> {
       if (apiKey.isEmpty) {
         final errorMsg = ChatMessage(
           id: (DateTime.now().millisecondsSinceEpoch + 1).toString(),
-          text: 'Erreur Cloud : Clé API Gemini manquante. Configurez-la dans le panneau de ressources (badge en haut à droite).',
+          text: 'Erreur Cloud : Clé API Gemini manquante. Configurez-la dans le panneau ressources (badge en haut à droite).',
           role: ChatRole.assistant,
           mode: ChatModeInfo('Erreur'),
         );
@@ -86,12 +67,9 @@ class ChatController extends StateNotifier<List<ChatMessage>> {
         return;
       }
 
-      // 1. Découverte dynamique du modèle valide
-      final activeModel = await _discoverActiveModel(apiKey) ?? 'gemini-1.5-flash';
-
       try {
         final response = await http.post(
-          Uri.parse('https://generativelanguage.googleapis.com/v1beta/models/$activeModel:generateContent'),
+          Uri.parse('https://generativelanguage.googleapis.com/v1beta/models/$selectedCloudModel:generateContent'),
           headers: {
             'Content-Type': 'application/json',
             'x-goog-api-key': apiKey,
@@ -110,14 +88,14 @@ class ChatController extends StateNotifier<List<ChatMessage>> {
           final data = jsonDecode(response.body);
           replyText = data['candidates']?[0]?['content']?['parts']?[0]?['text'] ?? 'Réponse Cloud vide';
         } else {
-          replyText = 'Cloud Erreur (${response.statusCode}) sur [$activeModel] : ${response.body}';
+          replyText = 'Cloud Erreur (${response.statusCode}) sur [$selectedCloudModel] : ${response.body}';
         }
 
         final assistantMsg = ChatMessage(
           id: (DateTime.now().millisecondsSinceEpoch + 1).toString(),
           text: replyText,
           role: ChatRole.assistant,
-          mode: ChatModeInfo('$modeLabel ($activeModel)'),
+          mode: ChatModeInfo(selectedCloudModel),
         );
         state = [...state, assistantMsg];
       } catch (e) {
@@ -130,7 +108,7 @@ class ChatController extends StateNotifier<List<ChatMessage>> {
         state = [...state, errorMsg];
       }
     } else {
-      // Appel du moteur local FFI / Stub
+      // Appel du moteur local FFI natif
       final engine = _ref.read(localEngineProvider);
       final reply = engine.infer(messageText);
 
